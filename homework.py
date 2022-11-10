@@ -81,15 +81,13 @@ def check_response(response):
 
 def parse_status(homework):
     """Extract status from information about HW."""
-    if 'status' in homework:
-        homework_status = homework['status']
-    else:
+    if not homework['status']:
         logging.error('Статус отсутствует')
-    if 'homework_name' in homework:
-        homework_name = homework['homework_name']
-    else:
+    if not homework['homework_name']:
         logging.error('Имя отсутствует')
     try:
+        homework_status = homework['status']
+        homework_name = homework['homework_name']
         verdict = HOMEWORK_STATUSES[homework_status]
     except Exception as error:
         logging.error(
