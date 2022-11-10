@@ -20,7 +20,8 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-RETRY_TIME = 600
+RETRY_TIME_SEC = 600
+MOUNT_SEC = 2629743
 ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
@@ -36,9 +37,9 @@ def send_message(bot, message):
     """Send message in chat. using TELEGRAM_CHAT_ID."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
+        logging.info('Сообщение отправлено')
     except Exception:
         logging.error('Сообщение не отправлено')
-    logging.info('Сообщение отправлено')
 
 
 def get_api_answer(current_timestamp):
@@ -69,20 +70,24 @@ def check_response(response):
     else:
         if 'homeworks' in response:
             homework = response['homeworks']
-            logging.info('check response успешно')
             if isinstance(homework, list):
+                logging.info('check response успешно')
                 return homework
+            else:
+                raise Exception('Оишбка типа данных. homework не list.')
         else:
-            raise Exception('response["homeworks"] не содержит данных.')
+            raise Exception('Нет ключа response["homeworks"].')
 
 
 def parse_status(homework):
     """Extract status from information about HW."""
-    homework_status = homework['status']
-    homework_name = homework['homework_name']
-    if homework_status not in homework:
+    if 'status' in homework:
+        homework_status = homework['status']
+    else:
         logging.error('Статус отсутствует')
-    if homework_name not in homework:
+    if 'homework_name' in homework:
+        homework_name = homework['homework_name']
+    else:
         logging.error('Имя отсутствует')
     try:
         verdict = HOMEWORK_STATUSES[homework_status]
@@ -98,25 +103,20 @@ def parse_status(homework):
 def check_tokens():
     """Check all tokens."""
     TOKENS = (PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID)
-    for var in TOKENS:
-        if var is None or len(str(var)) == 0:
-            logging.critical(
-                f'Отсутствует обязательная '
-                f'переменная окружения: {var}'
-                f'Программа принудительно остановлена.'
-            )
-            return False
-    logging.info('check_tokens успешно')
-    return True
+    if all(TOKENS) is True:
+        logging.info('check_tokens успешно')
+        return True
+    else:
+        logging.critical('Отсутсвтует токен')
+        return False
 
 
 def main():
     """Check all tokens."""
-    check_tokens()
-    bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    current_timestamp = int(time.time()) - 2629743
-    statusbefore = ''
-    while True:
+    if check_tokens() is True:
+        bot = telegram.Bot(token=TELEGRAM_TOKEN)
+        current_timestamp = int(time.time()) - MOUNT_SEC
+        statusbefore = ''
         try:
             response = get_api_answer(current_timestamp)
             check = check_response(response)
@@ -127,14 +127,16 @@ def main():
             if statusbefore != statusnow:
                 send_message(bot, statusnow)
                 statusbefore = statusnow
-                current_timestamp = response.get('current_date')
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             send_message(bot, message)
 
         finally:
+            current_timestamp = time.time()
             logging.info('main() выполнено')
-            time.sleep(RETRY_TIME)
+            time.sleep(RETRY_TIME_SEC)
+    else:
+        logging.error('main() не выполнено. Ошибка проверки токенов')
 
 
 if __name__ == '__main__':
